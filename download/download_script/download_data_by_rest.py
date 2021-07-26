@@ -9,12 +9,15 @@ from datetime import datetime
 import requests
 import pytz
 from howtrader.trader.database import database_manager
+import json
 
 pd.set_option('expand_frame_repr', False)  #
 from howtrader.trader.object import BarData, Interval, Exchange
 
 BINANCE_SPOT_LIMIT = 1000
 BINANCE_FUTURE_LIMIT = 1500
+BINANCE_FUTURE_DEPTH_LIMIT = 20
+BINANCE_FUTURE_TRADE_LIMIT = 100
 
 CHINA_TZ = pytz.timezone("Asia/Shanghai")
 from threading import Thread
@@ -60,20 +63,26 @@ def get_binance_data(symbol: str, exchanges: str, start_time: str, end_time: str
         print("coin_future")
         limit = BINANCE_FUTURE_LIMIT
         f'https://dapi.binance.com/dapi/v1/klines?symbol={symbol}&interval=1m&limit={limit}'
-
+    elif exchanges == 'future_depth':
+        print('future_depth')
+        limit = BINANCE_FUTURE_DEPTH_LIMIT
+        api_url = f'https://fapi.binance.com/fapi/v1/depth?symbol={symbol}&limit={limit}'
+    elif exchanges == 'future_trade':
+        print('future_trade')
+        limit = BINANCE_FUTURE_TRADE_LIMIT
+        api_url = f'https://fapi.binance.com/fapi/v1/trades?symbol={symbol}&limit={limit}'
     else:
-        raise Exception('交易所名称请输入以下其中一个：spot, future, coin_future')
+        raise Exception('名称请输入以下其中一个：spot, future, coin_future, future_depth')
 
     start_time = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000)
     end_time = int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000)
 
     while True:
         try:
-            print(start_time)
             url = f'{api_url}&startTime={start_time}'
             print(url)
             data = requests.get(url=url, timeout=10, proxies=proxies).json()
-
+            print(data)
             """
             [
                 [
@@ -90,33 +99,70 @@ def get_binance_data(symbol: str, exchanges: str, start_time: str, end_time: str
                     "1.23424865",      // 主动买入成交额(标的数量)
                     "0"                 // 请忽略该参数
                 ]
-
+            ]
             """
-
+            """
+            深度信息
+            {
+  "lastUpdateId": 1027024,
+  "E": 1589436922972,   // 消息时间
+  "T": 1589436922959,   // 撮合引擎时间
+  "bids": [             // 买单
+    [
+      "4.00000000",     // 价格
+      "431.00000000"    // 数量
+    ]
+  ],
+  "asks": [             // 卖单
+    [
+      "4.00000200",     // 价格
+      "12.00000000"     // 数量
+    ]
+  ]
+}
+永续合约交易数据
+[
+  {
+    "id": 28457,                // 成交ID
+    "price": "4.00000100",      // 成交价格
+    "qty": "12.00000000",       // 成交量
+    "quoteQty": "48.00",        // 成交额
+    "time": 1499865549590,      // 时间
+    "isBuyerMaker": true        // 买方是否为挂单方
+  }
+]
+            """
             buf = []
 
-            for l in data:
-                bar = BarData(
-                    symbol=save_symbol,
-                    exchange=Exchange.BINANCE,
-                    datetime=generate_datetime(l[0]),
-                    interval=Interval.MINUTE,
-                    volume=float(l[5]),
-                    open_price=float(l[1]),
-                    high_price=float(l[2]),
-                    low_price=float(l[3]),
-                    close_price=float(l[4]),
-                    gateway_name=gate_way
-                )
-                buf.append(bar)
+            if exchanges == "future_depth" :
+                with open('./data/{}_future_depth.txt'.format(symbol),'a') as f:
+                    f.write(json.dumps(data)+'\n')
+            elif exchanges == "future_trade" :
+                with open('./data/{}_future_trade.txt'.format(symbol),'a') as f:
+                    f.write(json.dumps(data)+'\n')
+            else :
+                for l in data:
+                    bar = BarData(
+                        symbol=save_symbol,
+                        exchange=Exchange.BINANCE,
+                        datetime=generate_datetime(l[0]),
+                        interval=Interval.MINUTE,
+                        volume=float(l[5]),
+                        open_price=float(l[1]),
+                        high_price=float(l[2]),
+                        low_price=float(l[3]),
+                        close_price=float(l[4]),
+                        gateway_name=gate_way
+                    )
+                    buf.append(bar)
 
-            database_manager.save_bar_data(buf)
+                database_manager.save_bar_data(buf)
 
-            # 到结束时间就退出, 后者收盘价大于当前的时间.
-            if (data[-1][0] > end_time) or data[-1][6] >= (int(time.time() * 1000) - 60 * 1000):
-                break
+                # 到结束时间就退出, 后者收盘价大于当前的时间.
+                if (data[-1][0] > end_time) or data[-1][6] >= (int(time.time() * 1000) - 60 * 1000):
+                    break
 
-            start_time = data[-1][0]
+                start_time = data[-1][0]
 
         except Exception as error:
             print(error)
@@ -148,8 +194,8 @@ def download_future(symbol):
     下载合约数据的方法。
     :return:
     """
-    t1 = Thread(target=get_binance_data, args=(symbol, 'future', "2019-9-10", "2020-3-1"))
-    t2 = Thread(target=get_binance_data, args=(symbol, 'future', "2019-3-1", "2020-11-16"))
+    t1 = Thread(target=get_binance_data, args=(symbol, 'future', "2021-1-1", "2021-1-1"))
+    t2 = Thread(target=get_binance_data, args=(symbol, 'future', "2021-1-1", "2021-1-1"))
 
     t1.start()
     t2.start()
@@ -157,13 +203,25 @@ def download_future(symbol):
     t1.join()
     t2.join()
 
+def download_future_depth_trade(symbol):
+    """
+    不断请求永续合约实时数据
+    """
+    t1 = Thread(target=get_binance_data, args=(symbol, "future_depth", "2021-1-1", "2021-1-1"))
+    t2 = Thread(target=get_binance_data, args=(symbol, "future_trade", "2021-1-1", "2021-1-1"))
+    
+    t1.start()
+    t2.start()
+
+    t1.join()
+    t2.join()
 
 if __name__ == '__main__':
 
     # 如果你有代理你就设置，如果没有你就设置为 None 或者空的字符串 "",
     # 但是你要确保你的电脑网络能访问币安交易所，你可以通过 ping api.binance.com 看看过能否ping得通
     proxy_host = "127.0.0.1"  # 如果没有就设置为"", 如果有就设置为你的代理主机如：127.0.0.1
-    proxy_port = 1087  # 设置你的代理端口号如: 1087, 没有你修改为0,但是要保证你能访问api.binance.com这个主机。
+    proxy_port = 7890  # 设置你的代理端口号如: 1087, 没有你修改为0,但是要保证你能访问api.binance.com这个主机。
 
     proxies = None
     if proxy_host and proxy_port:
@@ -173,5 +231,6 @@ if __name__ == '__main__':
     symbol = "BTCUSDT"
 
     # download_spot(symbol) # 下载现货的数据.
-
-    download_future(symbol)  # 下载合约的数据
+    #download_future(symbol)  # 下载合约的数据
+    download_future_depth_trade(symbol)
+    

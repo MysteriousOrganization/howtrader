@@ -54,13 +54,21 @@ encounter some unexpected errors.
 
 
 # 使用 Usage
-你需要在项目下面创建一个文件夹加，howtrader, 这个主要是存放一些日记和配置文件的信息。
+1. 你需要在项目下面创建一个文件夹加，howtrader, 这个主要是存放一些日记和配置文件的信息。
 如果不不知道配置文件如何配置，你可以启动examples文件目录下面的main_window.py文件，就可以看到其下面的一些日志和配置文件信息了。
 
-1. firstly you need to create a folder(howtrader) at your project, at
-   this folder, there are log file or configuration file. If you're not
-   sure how to config, you can simply run the main_window.py at examples
-   folder, you can play with UI.
+
+2. 需要在howtrader下面创建币安账号配置文件binance_settings.json，如下填写币安交易账号
+```json
+{
+    "key": "xxx",
+    "secret": "xxx",
+    "session_number": 3,
+    "proxy_host": "127.0.0.1",
+    "proxy_port": 7890
+}
+```
+
 # 数据爬取
 howtrader可以通过data_manager的app直接下载数据，但是这个过程比较慢，适合少量数据的更新。
 如果你想批量获取数据，可以参考examples下面的download_data_demo2.py文件.
@@ -102,7 +110,3 @@ folder by using the multi-threads for speeding.
 
 9. V2.1.8.1 修改接口的api关于资产的推送问题.
 
-## 联系方式
-微信: bitquant51
-
-[币安邀请链接](https://www.binancezh.pro/cn/futures/ref/51bitquant)

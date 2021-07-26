@@ -1,0 +1,11 @@
+{
+    "dogetest": {
+        "class_name": "DoubleMaStrategy",
+        "vt_symbol": "dogeusdt.BINANCE",
+        "setting": {
+            "class_name": "DoubleMaStrategy",
+            "fast_window": 5,
+            "slow_window": 10
+        }
+    }
+}

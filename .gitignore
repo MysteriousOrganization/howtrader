@@ -33,3 +33,14 @@ _templates
 
 # Misc
 .DS_Store
+
+# log
+howtrader/log
+download/download_script/log
+
+# data
+*/*.db
+download/data/
+
+# config
+howtrader/binance_settings.json

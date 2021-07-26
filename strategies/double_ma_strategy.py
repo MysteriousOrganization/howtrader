@@ -11,12 +11,14 @@ from howtrader.app.cta_strategy import (
 
 import pandas_ta as ta
 import pandas as pd
+from datetime import datetime, timedelta
+import pytz
+utc=pytz.UTC
+
 
 class DoubleMaStrategy(CtaTemplate):
-    author = "用Python的交易员"
-
-    fast_window = 10
-    slow_window = 20
+    fast_window = 5
+    slow_window = 10
 
     fast_ma0 = 0.0
     fast_ma1 = 0.0
@@ -39,7 +41,7 @@ class DoubleMaStrategy(CtaTemplate):
         Callback when strategy is inited.
         """
         self.write_log("策略初始化")
-        self.load_bar(10)
+        self.load_bar(1)
 
     def on_start(self):
         """
@@ -66,14 +68,18 @@ class DoubleMaStrategy(CtaTemplate):
         """
         Callback of new bar data update.
         """
-
         am = self.am
         am.update_bar(bar)
         if not am.inited:
             return
 
-        close = pd.Series(am.close_array)
+        self.write_log("bar.datetime:{}".format(bar.datetime))
+        now = datetime.now()
+        now = now.replace(tzinfo=bar.datetime.tzinfo)
+        if bar.datetime + timedelta(seconds=120) < now:
+            return
 
+        close = pd.Series(am.close_array)
         fast_ma = ta.sma(close, self.fast_window)
         self.fast_ma0 = fast_ma.iloc[-1]
         self.fast_ma1 = fast_ma.iloc[-2]
@@ -85,19 +91,20 @@ class DoubleMaStrategy(CtaTemplate):
         cross_over = self.fast_ma0 > self.slow_ma0 and self.fast_ma1 < self.slow_ma1
         cross_below = self.fast_ma0 < self.slow_ma0 and self.fast_ma1 > self.slow_ma1
 
+        print("self.pos:{}".format(self.pos))
         if cross_over:
             if self.pos == 0:
-                self.buy(bar.close_price, 1)
+                self.buy(bar.close_price, 20/bar.close_price)
             elif self.pos < 0:
-                self.cover(bar.close_price, 1)
-                self.buy(bar.close_price, 1)
+                self.cover(bar.close_price, 20/bar.close_price)
+                self.buy(bar.close_price, 20/bar.close_price)
 
         elif cross_below:
             if self.pos == 0:
-                self.short(bar.close_price, 1)
+                self.short(bar.close_price, 20/bar.close_price)
             elif self.pos > 0:
-                self.sell(bar.close_price, 1)
-                self.short(bar.close_price, 1)
+                self.sell(bar.close_price, 20/bar.close_price)
+                self.short(bar.close_price, 20/bar.close_price)
 
         self.put_event()
 
